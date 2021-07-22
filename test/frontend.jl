@@ -164,3 +164,26 @@ measure cout[0] -> ans[4];
 """
 end
 
+using YaoCompiler
+using YaoCompiler.Intrinsics
+using YaoTargetQASM
+using CompilerPluginTools
+
+interp = YaoInterpreter()
+op = typeof(Adder3.adder3())
+target = OpenQASMTarget()
+tt = Tuple{AnyReg, op}
+mi = method_instance(Intrinsics.apply, tt)
+src = Core.Compiler.typeinf_ext_toplevel(interp, mi)
+
+info = RegInfo(OpenQASMTarget(), src)
+creg_ssa_map, ssa_creg_map = YaoTargetQASM.extract_creg_map(src)
+
+
+creg_size = extract_creg_size(ci, creg_ssa_map)
+locs_to_qreg = extract_qreg(target, ci)
+qreg_to_locs, locs_to_qreg, locs_to_addr = extract_locs_address(locs_to_qreg)
+
+# # we need to remove code coverage effect to pass validate
+# YaoTargetQASM.validate(target, src)
+# code_qasm(typeof(Adder3.adder3()))

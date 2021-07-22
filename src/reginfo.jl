@@ -58,6 +58,7 @@ end
 function extract_creg_map(ci::CodeInfo)
     creg_ssa_map = Dict{Symbol, Int}()
     ssa_creg_map = Dict{Int, Symbol}()
+    creg_size = Dict{Symbol, Int}()
 
     # find alias name for return NamedTuple
     for (v, stmt) in enumerate(ci.code)
@@ -66,17 +67,35 @@ function extract_creg_map(ci::CodeInfo)
             _ => nothing
         end
 
+        # do not have classical return
         isnothing(ret) && continue
+
+        # if we have classical return
+        # it must be NamedTuple
 
         @switch ret begin
             @case Expr(:new, type::Type{<:NamedTuple}, args...)
                 cregs = type.parameters[1]
                 ctypes = type.parameters[2]
-                ctypes <: NTuple{N, <:MeasureResult} where N || continue
-                for (name, val) in zip(cregs, args)
+                # @show ctypes                
+                # for t in ctypes.parameters
+                #     t <: NTuple{N, <:MeasureResult} where N ||
+                #         error("QASM toplevel must return MeasureResult as classical value")
+                # end
+
+                for (name, val, typ) in zip(cregs, args, ctypes.parameters)
                     val::SSAValue
-                    creg_ssa_map[name] = val.id
-                    ssa_creg_map[val.id] = name
+                    if typ <: MeasureResult
+                        creg_ssa_map[name] = val.id
+                        ssa_creg_map[val.id] = name
+                    elseif typ <: NTuple{N, <:MeasureResult} where N
+                        for each in ci.code[val.id].args[2:end]
+                            ci.ssavaluetypes[each.id] <: MeasureResult || error("cannot return non MeasureResult for QASM 2.0 toplevel program")
+                            @show each
+                        end
+                    else
+                        error("QASM toplevel program must return NamedTuple of MeasureResult")
+                    end
                 end
             @case _
                 nothing
